@@ -12,6 +12,10 @@
 /[Uu]ser[Ss]ettings/
 *.log
 
+# Unity generated folders
+[Tt]emp/
+
+
 # By default unity supports Blender asset imports, *.blend1 blender files do not need to be commited to version control.
 *.blend1
 *.blend1.meta
@@ -97,3 +101,35 @@ InitTestScene*.unity*
 
 # Auto-generated scenes by play mode tests
 /[Aa]ssets/[Ii]nit[Tt]est[Ss]cene*.unity*
+
+# VSCode
+.vscode/
+
+# JetBrains Rider
+.idea/
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+
+# GitHub-generated helper files or logs
+*.log
+*.tmp
+
+# Unity csproj, solution files (should be regenerated)
+*.sln
+*.csproj
+*.unityproj
+*.pidb
+*.booproj
+*.user
+*.svd
+
+# Ignore the local Unity test project
+BlenderToUnityPBRImporter/
+
+
+# Local package cache
+**/LocalPackages/

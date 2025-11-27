@@ -1,0 +1,11 @@
+{
+  "name": "com.te1u-lite.blender-to-unity-pbr-importer",
+  "version": "0.1.0",
+  "displayName": "Blender To Unity PBR Importer",
+  "description": "Automatically converts Blender-exported PBR FBX models for Unity. Includes texture auto-assign and roughness-to-smoothness conversion.",
+  "unity": "2022.3",
+  "author": {
+    "name": "te1u-lite",
+    "url": "https://github.com/te1u-lite"
+  }
+}
