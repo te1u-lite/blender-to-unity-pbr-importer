@@ -1,4 +1,5 @@
 using System.IO;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEditor;
 
@@ -6,6 +7,67 @@ namespace BlenderToUnityPBRImporter.Editor
 {
     public class TextureAssigner
     {
+        public class TextureAssignmentData
+        {
+            public List<Texture2D> AllTextures = new();  // ← ここが重要：手動選択用
+            public List<Texture2D> AlbedoCandidates = new();
+            public List<Texture2D> NormalCandidates = new();
+            public List<Texture2D> MetallicCandidates = new();
+            public List<Texture2D> RoughnessCandidates = new();
+
+            // UI で最終的に選ばれたもの
+            public Texture2D Albedo;
+            public Texture2D Normal;
+            public Texture2D Metallic;
+            public Texture2D Roughness;
+        }
+
+        /// <summary>
+        /// TextureFinder の結果を基に「仮割り当て」 (候補が1つなら自動決定)
+        /// Material にはまだ適用しない (UI確認後に適用する)
+        /// </summary>
+        public TextureAssignmentData PrepareAssignment(TextureFinder.TextureSearchResult search)
+        {
+            var data = new TextureAssignmentData();
+
+            // 全テクスチャを統合 (ここが重要:手動選択用)
+            data.AllTextures.AddRange(search.Albedo);
+            data.AllTextures.AddRange(search.Normal);
+            data.AllTextures.AddRange(search.Metallic);
+            data.AllTextures.AddRange(search.Roughness);
+            data.AllTextures.AddRange(search.Unknown);
+
+            // 候補リスト
+            data.AlbedoCandidates = search.Albedo;
+            data.NormalCandidates = search.Normal;
+            data.MetallicCandidates = search.Metallic;
+            data.RoughnessCandidates = search.Roughness;
+
+            // 候補が 1 つだけなら自動選択
+            if(search.Albedo.Count == 1) data.Albedo = search.Albedo[0];
+            if(search.Normal.Count == 1) data.Normal = search.Normal[0];
+            if(search.Metallic.Count == 1) data.Metallic = search.Metallic[0];
+            if(search.Roughness.Count == 1) data.Roughness = search.Roughness[0];
+
+            return data;
+        }
+
+        /// <summary>
+        /// UI で確定した TextureAssignmentData から Material に設定する
+        /// </summary>
+        public void ApplyToMaterial(Material material, TextureAssignmentData data)
+        {
+            if (data.Albedo != null)
+            {
+                material.SetTexture("_MainTex", data.Albedo);
+            }
+
+            if (data.Normal != null)
+            {
+                material.SetTexture("_BumpMap", data.Normal);
+            }
+        }
+
         public void AssignTextures(Material material, string textureSearchFolder)
         {
             if (material == null)
