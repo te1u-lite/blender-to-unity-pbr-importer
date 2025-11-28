@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace BlenderToUnityPBRImporter.Editor.MaterialBuilder
+namespace BlenderToUnityPBRImporter.Editor
 {
     public abstract class MaterialBuilder
     {

@@ -1,0 +1,8 @@
+{
+    "name": "BlenderToUnityPBRImporter.Editor",
+    "rootNamespace": "BlenderToUnityPBRImporter.Editor",
+    "references": [],
+    "includePlatforms": ["Editor"],
+    "autoReferenced": true,
+    "overrideReferences": false
+}

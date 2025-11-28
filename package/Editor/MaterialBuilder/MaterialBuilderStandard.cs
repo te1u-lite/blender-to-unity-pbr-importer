@@ -2,7 +2,7 @@ using UnityEngine;
 using UnityEditor;
 using System.IO;
 
-namespace BlenderToUnityPBRImporter.Editor.MaterialBuilder
+namespace BlenderToUnityPBRImporter.Editor
 {
     public class MaterialBuilderStandard : MaterialBuilder
     {
