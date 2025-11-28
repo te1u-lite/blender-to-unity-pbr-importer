@@ -6,12 +6,14 @@ using UnityEditor;
 namespace BlenderToUnityPBRImporter.Editor
 {
     /// <summary>
-    /// 指定フォルダ内の Texture2D を検索し、
-    /// Albedo / Normal / Metallic / Roughness などの候補リストとして返す。
-    /// 複数候補があっても良い（後でUIで選択できるため）
+    /// 指定フォルダから Texture2D を検索し、
+    /// Albedo / Normal / Metallic / Roughness などへ分類するユーティリティ。
     /// </summary>
     public static class TextureFinder
     {
+        /// <summary>
+        /// テクスチャ分類結果を保持するデータクラス。
+        /// </summary>
         public class TextureSearchResult
         {
             public List<Texture2D> Albedo = new();
@@ -21,20 +23,22 @@ namespace BlenderToUnityPBRImporter.Editor
             public List<Texture2D> Unknown = new();  // どれにも当てはまらなかったもの
         }
 
-
+        /// <summary>
+        /// 指定フォルダ内の Texture2D を検索し分類する。
+        /// </summary>
         public static TextureSearchResult FindTextures(string folderFullPath)
         {
             var result = new TextureSearchResult();
 
             if (string.IsNullOrEmpty(folderFullPath) || !Directory.Exists(folderFullPath))
             {
-                Debug.LogError($"[TextureFinder] フォルダが存在しません: {folderFullPath}");
+                Debug.LogError($"[ERROR][TextureFinder] フォルダが存在しません: {folderFullPath}");
                 return result;
             }
 
             string folderAssetPath = ToAssetPath(folderFullPath);
 
-            // Texture2D を検索
+            // Texture2D のみを検索
             string[] guids = AssetDatabase.FindAssets("t:Texture2D", new[] { folderAssetPath });
 
             foreach (var guid in guids)
@@ -43,34 +47,23 @@ namespace BlenderToUnityPBRImporter.Editor
                 Texture2D tex = AssetDatabase.LoadAssetAtPath<Texture2D>(assetPath);
                 if (tex == null) continue;
 
-                string lower = Path.GetFileName(assetPath).ToLower();
-
-                if (IsAlbedo(lower))
-                {
-                    result.Albedo.Add(tex);
-                }
-                else if (IsNormal(lower))
-                {
-                    result.Normal.Add(tex);
-                }
-                else if (IsMetallic(lower))
-                {
-                    result.Metallic.Add(tex);
-                }
-                else if (IsRoughness(lower))
-                {
-                    result.Roughness.Add(tex);
-                }
-                else
-                {
-                    result.Unknown.Add(tex);
-                }
+                string f = Path.GetFileName(assetPath).ToLower();
+                if (IsAlbedo(f)) result.Albedo.Add(tex);
+                else if (IsNormal(f)) result.Normal.Add(tex);
+                else if (IsMetallic(f)) result.Metallic.Add(tex);
+                else if (IsRoughness(f)) result.Roughness.Add(tex);
+                else result.Unknown.Add(tex);
             }
+
+            Debug.Log($"[INFO][TextureFinder] テクスチャ検索完了: Albedo={result.Albedo.Count}, Normal={result.Normal.Count}, Metallic={result.Metallic.Count}, Roughness={result.Roughness.Count}, Unknown={result.Unknown.Count}");
 
             return result;
         }
 
-        private static bool IsAlbedo(string f)
+        /// <summary>
+        /// ファイル名から Albedo テクスチャかどうかを判定する。
+        /// </summary>
+        public static bool IsAlbedo(string f)
         {
             return f.Contains("albedo") ||
                 f.Contains("basecolor") ||
@@ -79,39 +72,44 @@ namespace BlenderToUnityPBRImporter.Editor
                 f.Contains("color");
         }
 
-        private static bool IsNormal(string f)
+        /// <summary>
+        /// ファイル名から NormalMap かどうかを判定する。
+        /// </summary>
+        public static bool IsNormal(string f)
         {
             return f.Contains("normal") ||
                 f.Contains("nrm") ||
                 f.Contains("_nor");
         }
 
-        private static bool IsMetallic(string f)
+        /// <summary>
+        /// ファイル名から Metallic テクスチャかどうかを判定する。
+        /// </summary>
+        public static bool IsMetallic(string f)
         {
             return f.Contains("metal") ||
                 f.Contains("metallic");
         }
 
-        private static bool IsRoughness(string f)
+        /// <summary>
+        /// ファイル名から Roughness テクスチャかどうかを判定する。
+        /// </summary>
+        public static bool IsRoughness(string f)
         {
             return f.Contains("rough") ||
                 f.Contains("roughness") ||
                 f.Contains("_rgh");
         }
 
-        // 絶対パスを Assets/ に変換
-        private static string ToAssetPath(string fullPath)
+
+        /// <summary>
+        /// 絶対パスを Assets/ から始まるパスへ変換する。
+        /// </summary>
+        public static string ToAssetPath(string fullPath)
         {
             fullPath = fullPath.Replace("\\", "/");
-            var dataPath = Application.dataPath.Replace("\\", "/");
-
-            if (fullPath.StartsWith(dataPath))
-            {
-                return "Assets" + fullPath.Substring(dataPath.Length);
-            }
-
-            Debug.LogWarning($"[TextureFinder] Assets パスに変換できません: {fullPath}");
-            return fullPath;
+            string data = Application.dataPath.Replace("\\", "/");
+            return fullPath.StartsWith(data) ? "Assets" + fullPath[data.Length..] : fullPath;
         }
     }
 }
