@@ -2,6 +2,7 @@ using System.IO;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEditor;
+using JetBrains.Annotations;
 
 namespace BlenderToUnityPBRImporter.Editor
 {
@@ -35,6 +36,8 @@ namespace BlenderToUnityPBRImporter.Editor
         /// </summary>
         public TextureAssignmentData PrepareAssignment(TextureFinder.TextureSearchResult search)
         {
+            var settings = PbrImportSettings.GetOrCreateSettings();
+
             var data = new TextureAssignmentData()
             {
                 AlbedoCandidates = search.Albedo,
@@ -51,58 +54,93 @@ namespace BlenderToUnityPBRImporter.Editor
             data.AllTextures.AddRange(search.Unknown);
 
             // 候補が 1 つだけなら自動選択
-            if (search.Albedo.Count == 1) data.Albedo = search.Albedo[0];
-            if (search.Normal.Count == 1) data.Normal = search.Normal[0];
-            if (search.Metallic.Count == 1) data.Metallic = search.Metallic[0];
-            if (search.Roughness.Count == 1) data.Roughness = search.Roughness[0];
+            if (search.Albedo.Count == 1)
+                data.Albedo = search.Albedo[0];
+            else if (search.Albedo.Count > 1)
+                data.Albedo = SelectByPriority(search.Albedo, settings.albedoPriority);
+
+            if (search.Normal.Count == 1)
+                data.Normal = search.Normal[0];
+            else if (search.Normal.Count > 1)
+                data.Normal = SelectByPriority(search.Normal, settings.normalPriority);
+
+            if (search.Metallic.Count == 1)
+                data.Metallic = search.Metallic[0];
+            else if (search.Metallic.Count > 1)
+                data.Metallic = SelectByPriority(search.Metallic, settings.metallicPriority);
+
+            if (search.Roughness.Count == 1)
+                data.Roughness = search.Roughness[0];
+            else if (search.Roughness.Count > 1)
+                data.Roughness = SelectByPriority(search.Roughness, settings.roughnessPriority);
 
             return data;
+        }
+
+        private Texture2D SelectByPriority(List<Texture2D> list, int Priority)
+        {
+            if (Priority < 0 || Priority >= list.Count)
+                return list[0];
+            return list[Priority];
         }
 
         /// <summary>
         /// TextureAssignmentData の内容を Material に反映する。
         /// Albedo/Normal は直接セットし、Metallic/Roughness は MR マップ生成に利用する。
         /// </summary>
-        public void ApplyToMaterial(Material material, TextureAssignmentData data, bool generateMR = true)
+        public bool ApplyToMaterial(Material material, TextureAssignmentData data)
         {
+            bool changed = false;
+            var settings = PbrImportSettings.GetOrCreateSettings();
+
             if (material == null)
             {
                 Debug.LogError("[ERROR][TextureAssigner] material が null のため割り当てを中断します。");
-                return;
+                return false;
             }
 
-            // 1. Albedo / Normal をセット
-            if (data.Albedo)
+            // Albedo
+            if (data.Albedo && material.GetTexture("_MainTex") != data.Albedo)
+            {
                 material.SetTexture("_MainTex", data.Albedo);
+                changed = true;
+            }
 
-            if (data.Normal)
+            // Normal
+            if (data.Normal && material.GetTexture("_BumpMap") != data.Normal)
             {
                 var normalPath = AssetDatabase.GetAssetPath(data.Normal);
                 SetTextureAsNormalMap(normalPath);
                 material.SetTexture("_BumpMap", data.Normal);
+                changed = true;
             }
 
-            // 2. Metallic / Roughness をセット or MR を生成
-            if (!generateMR) return;
-
-            string metallicPath = data.Metallic ? AssetDatabase.GetAssetPath(data.Metallic) : null;
-            string roughPath = data.Roughness ? AssetDatabase.GetAssetPath(data.Roughness) : null;
-
-            Texture2D mrTex = TextureConverter.CreateMetallicRoughnessMap(metallicPath, roughPath);
-
-            if (mrTex != null)
+            // Metallic / Roughness
+            if (settings.generateMetallicRoughness)
             {
-                material.SetTexture("_MetallicGlossMap", mrTex);
-                material.EnableKeyword("_METALLICGLOSSMAP");
+                Texture2D before = material.GetTexture("_MetallicGlossMap") as Texture2D;
+
+                GenerateAndApplyMR(material, data);
+
+                Texture2D after = material.GetTexture("_MetallicGlossMap") as Texture2D;
+
+                if (before != after)
+                    changed = true;
             }
-            else if (data.Metallic != null)
+            else
             {
-                // fallback: Metallic 単体をそのまま使う
-                material.SetTexture("_MetallicGlossMap", data.Metallic);
-                material.EnableKeyword("_METALLICGLOSSMAP");
+                if (data.Metallic && material.GetTexture("_MetallicGlossMap") != data.Metallic)
+                {
+                    material.SetTexture("_MetallicGlossMap", data.Metallic);
+                    material.EnableKeyword("_METALLICGLOSSMAP");
+                    changed = true;
+                }
             }
 
-            Debug.Log("[INFO][TextureAssigner] Material へのテクスチャ割り当てが完了しました。");
+            if (changed)
+                Debug.Log("[INFO][TextureAssigner] Material に変更がありました → Dirty");
+
+            return changed;
         }
 
         /// <summary>
@@ -134,7 +172,7 @@ namespace BlenderToUnityPBRImporter.Editor
             var data = PrepareAssignment(search);
 
             // 自動割り当て
-            ApplyToMaterial(material, data, generateMR: true);
+            ApplyToMaterial(material, data);
 
             Debug.Log("[INFO][TextureAssigner] テクスチャ自動割り当て処理が完了しました。");
         }
@@ -152,6 +190,21 @@ namespace BlenderToUnityPBRImporter.Editor
                 importer.SaveAndReimport();
 
                 Debug.Log($"[INFO][TextureAssigner] NormalMap として再インポート: {assetPath}");
+            }
+        }
+
+        private void GenerateAndApplyMR(Material material, TextureAssignmentData data)
+        {
+
+            string metallicPath = data.Metallic ? AssetDatabase.GetAssetPath(data.Metallic) : null;
+            string roughPath = data.Roughness ? AssetDatabase.GetAssetPath(data.Roughness) : null;
+
+            Texture2D mrTex = TextureConverter.CreateMetallicRoughnessMap(metallicPath, roughPath);
+
+            if (mrTex != null)
+            {
+                material.SetTexture("_MetallicGlossMap", mrTex);
+                material.EnableKeyword("_METALLICGLOSSMAP");
             }
         }
     }

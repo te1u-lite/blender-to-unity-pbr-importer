@@ -116,7 +116,7 @@ namespace BlenderToUnityPBRImporter.Editor
                 return;
             }
             var assigner = new TextureAssigner();
-            assigner.ApplyToMaterial(mat, assignmentData, generateMR: true);
+            assigner.ApplyToMaterial(mat, assignmentData);
 
             Debug.Log("[INFO][TextureAssignmentWindow] Material へテクスチャ割り当てが完了しました。");
         }
@@ -140,7 +140,7 @@ namespace BlenderToUnityPBRImporter.Editor
 
             return new MaterialBuilderStandard().CreateMaterial(matFolder, name);
         }
-        
+
 
         /// <summary>
         /// FBX に対応する FBM フォルダのフルパスを返す。

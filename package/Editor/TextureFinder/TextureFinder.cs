@@ -60,16 +60,22 @@ namespace BlenderToUnityPBRImporter.Editor
             return result;
         }
 
+        static bool Match(string fileName, string[] keywords)
+        {
+            fileName = fileName.ToLower();
+            foreach (var key in keywords)
+                if (fileName.Contains(key.ToLower()))
+                    return true;
+            return false;
+        }
+
         /// <summary>
         /// ファイル名から Albedo テクスチャかどうかを判定する。
         /// </summary>
         public static bool IsAlbedo(string f)
         {
-            return f.Contains("albedo") ||
-                f.Contains("basecolor") ||
-                f.Contains("_diff") ||
-                f.Contains("diffuse") ||
-                f.Contains("color");
+            var settings = PbrImportSettings.GetOrCreateSettings();
+            return Match(f, settings.albedoKeywords);
         }
 
         /// <summary>
@@ -77,9 +83,8 @@ namespace BlenderToUnityPBRImporter.Editor
         /// </summary>
         public static bool IsNormal(string f)
         {
-            return f.Contains("normal") ||
-                f.Contains("nrm") ||
-                f.Contains("_nor");
+            var settings = PbrImportSettings.GetOrCreateSettings();
+            return Match(f, settings.normalKeywords);
         }
 
         /// <summary>
@@ -87,8 +92,8 @@ namespace BlenderToUnityPBRImporter.Editor
         /// </summary>
         public static bool IsMetallic(string f)
         {
-            return f.Contains("metal") ||
-                f.Contains("metallic");
+            var settings = PbrImportSettings.GetOrCreateSettings();
+            return Match(f, settings.metallicKeywords);
         }
 
         /// <summary>
@@ -96,9 +101,8 @@ namespace BlenderToUnityPBRImporter.Editor
         /// </summary>
         public static bool IsRoughness(string f)
         {
-            return f.Contains("rough") ||
-                f.Contains("roughness") ||
-                f.Contains("_rgh");
+            var settings = PbrImportSettings.GetOrCreateSettings();
+            return Match(f, settings.roughnessKeywords);
         }
 
 

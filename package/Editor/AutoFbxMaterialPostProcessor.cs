@@ -11,6 +11,11 @@ namespace BlenderToUnityPBRImporter.Editor
     {
         void OnPostprocessModel(GameObject fbxRoot)
         {
+            var settings = PbrImportSettings.GetOrCreateSettings();
+
+            if (!settings.autoImportEnabled)
+                return;
+
             string fbxPath = assetPath;
 
             if (!fbxPath.EndsWith(".fbx", System.StringComparison.OrdinalIgnoreCase))
@@ -23,27 +28,27 @@ namespace BlenderToUnityPBRImporter.Editor
             });
         }
 
-        private void ProcessFbxAfterImport(string fbxPath)
+        private void ProcessFbxAfterImport(string fbxPath, bool force = false)
         {
             // 1) Importer 取得＆処理済みチェック
             var importer = AssetImporter.GetAtPath(fbxPath) as ModelImporter;
             if (importer == null)
                 return;
 
+            importer.materialLocation = ModelImporterMaterialLocation.External;
+
             const string ProcessedFlag = "BTU_PBR_IMPORTED";
 
-            if (importer.userData == ProcessedFlag)
+            if (force)
             {
-                Debug.Log("[AutoFbxMaterialPostProcessor] このFBXはすでに処理済みのためスキップします: " + fbxPath);
-                return;
+                importer.userData = ""; // リセット
             }
 
             // 2) パス系
             string dir = Path.GetDirectoryName(fbxPath);
             string fbxName = Path.GetFileNameWithoutExtension(fbxPath);
-            string matFolder = $"{dir}/Materials";
 
-            // Materials フォルダ作成（なければ）
+            string matFolder = $"{dir}/Materials";
             if (!AssetDatabase.IsValidFolder(matFolder))
                 AssetDatabase.CreateFolder(dir, "Materials");
 
@@ -60,6 +65,7 @@ namespace BlenderToUnityPBRImporter.Editor
             var assigner = new TextureAssigner();
             var data = assigner.PrepareAssignment(search);
 
+            var settings = PbrImportSettings.GetOrCreateSettings();
             var builder = new MaterialBuilderStandard();
 
             bool changed = false;
@@ -67,6 +73,7 @@ namespace BlenderToUnityPBRImporter.Editor
 
             // 4) FBX 内部マテリアルごとに外部マテリアルを用意して Remap
             var internalAssets = AssetDatabase.LoadAllAssetsAtPath(fbxPath);
+
             foreach (var internalObj in internalAssets)
             {
                 if (internalObj is not Material internalMat)
@@ -74,19 +81,20 @@ namespace BlenderToUnityPBRImporter.Editor
 
                 string internalMatName = internalMat.name;
 
-                // 名前に基づいて外部マテリアルを作成／再利用（StarSparrow → StarSparrow_mat.mat）
                 var externalMat = builder.CreateMaterial(matFolder, internalMatName);
                 if (externalMat == null)
                     continue;
 
-                // 必要に応じてテクスチャ割り当て
-                assigner.ApplyToMaterial(externalMat, data, generateMR: true);
+                // マテリアル内容の変更を検知
+                bool matDirty = assigner.ApplyToMaterial(externalMat, data);
+                if (matDirty)
+                {
+                    changed = true;
+                    EditorUtility.SetDirty(externalMat);
+                }
 
-                // Remap キー
-                var id = new AssetImporter.SourceAssetIdentifier(
-                    typeof(Material),
-                    internalMatName
-                );
+                // ★ Remap（これが無いと絶対に反映されない）
+                var id = new AssetImporter.SourceAssetIdentifier(typeof(Material), internalMatName);
 
                 if (!existingMap.TryGetValue(id, out var mappedObj) || mappedObj != externalMat)
                 {
@@ -95,13 +103,12 @@ namespace BlenderToUnityPBRImporter.Editor
                 }
             }
 
-            // 5) 変更があったときだけ再インポート＆処理済みフラグ
             if (changed)
             {
                 importer.userData = ProcessedFlag;
-                importer.SaveAndReimport();
+                AssetDatabase.WriteImportSettingsIfDirty(fbxPath);
+                AssetDatabase.ImportAsset(fbxPath, ImportAssetOptions.ForceUpdate);
             }
         }
-
     }
 }
