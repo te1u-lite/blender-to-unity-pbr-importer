@@ -103,7 +103,7 @@ namespace BlenderToUnityPBRImporter.Editor
                     continue;
 
                 // マテリアル内容の変更を検知
-                bool matDirty = assigner.ApplyToMaterial(externalMat, data, TextureAssignmentWindow.MRMode.MetallicAndRoughness);
+                bool matDirty = assigner.ApplyToMaterial(externalMat, data, search, TextureAssignmentWindow.MRMode.MetallicAndRoughness);
                 if (matDirty)
                 {
                     changed = true;

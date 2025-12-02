@@ -46,6 +46,11 @@ namespace BlenderToUnityPBRImporter.Editor
         }
 
         /// <summary>
+        /// Roughness が無い場合に使うデフォルト Smoothness 値（建物向けは 0.5 が最適）
+        /// </summary>
+        public const float DefaultSmoothnessIfNoRoughness = 0.5f;
+
+        /// <summary>
         /// Metallic (R) と Roughness (R) → Standard シェーダーで使用できる
         /// MetallicGlossMap (RGB:Metallic, A:Smoothness) を生成する。
         /// </summary>
@@ -65,28 +70,45 @@ namespace BlenderToUnityPBRImporter.Editor
             int w = metallic ? metallic.width : rough.width;
             int h = metallic ? metallic.height : rough.height;
 
-            var result = new Color[w * h];
-            var mPix = metallic ? metallic.GetPixels() : null;
-            var rPix = rough ? rough.GetPixels() : null;
+            Color[] result = new Color[w * h];
+            Color[] mPix = metallic ? metallic.GetPixels() : null;
+            Color[] rPix = rough ? rough.GetPixels() : null;
 
             for (int i = 0; i < result.Length; i++)
             {
+                // Metallic 値（RGB 同一）
                 float m = mPix != null ? mPix[i].r : 0f;
-                float r = rPix != null ? rPix[i].r : 1f;
-                result[i] = new Color(m, m, m, 1f - r);
+
+                // Smoothness (A) の決定
+                float s;
+
+                if (rPix != null)
+                {
+                    // Roughness → Smoothness = 1 - rough
+                    float r = rPix[i].r;
+                    s = 1f - r;
+                }
+                else
+                {
+                    // ★ Roughness が無い場合：建物向け最適値（0.5）
+                    s = DefaultSmoothnessIfNoRoughness;
+                }
+
+                result[i] = new Color(m, m, m, s);
             }
 
             var output = new Texture2D(w, h, TextureFormat.RGBA32, false);
             output.SetPixels(result);
             output.Apply();
 
-            // 保存
+            // 保存パス
             string dir = Path.GetDirectoryName(ToAssetPath(metallicPath ?? roughnessPath));
-            string savePath = Path.Combine(dir, "metallicsmoothness.png").Replace('\\', '/');
+            string savePath = Path.Combine(dir, "metallicsmoothness.png").Replace("\\", "/");
             File.WriteAllBytes(savePath, output.EncodeToPNG());
             AssetDatabase.ImportAsset(savePath);
 
             Debug.Log($"[INFO][TextureConverter] MetallicRoughnessMap を生成しました: {savePath}");
+
             return AssetDatabase.LoadAssetAtPath<Texture2D>(savePath);
         }
 
