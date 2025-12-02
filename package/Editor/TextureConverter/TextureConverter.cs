@@ -82,7 +82,7 @@ namespace BlenderToUnityPBRImporter.Editor
 
             // 保存
             string dir = Path.GetDirectoryName(ToAssetPath(metallicPath ?? roughnessPath));
-            string savePath = Path.Combine(dir, "metallicroughness.png").Replace('\\', '/');
+            string savePath = Path.Combine(dir, "metallicsmoothness.png").Replace('\\', '/');
             File.WriteAllBytes(savePath, output.EncodeToPNG());
             AssetDatabase.ImportAsset(savePath);
 
