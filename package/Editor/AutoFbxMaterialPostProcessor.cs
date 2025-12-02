@@ -9,6 +9,23 @@ namespace BlenderToUnityPBRImporter.Editor
     /// </summary>
     public class AutoFbxMaterialPostProcessor : AssetPostprocessor
     {
+        void OnPreprocessTexture()
+        {
+            var importer = (TextureImporter)assetImporter;
+
+            string file = System.IO.Path.GetFileName(assetPath).ToLower();
+
+            // NormalMap 判定（あなたの設定に合わせる）
+            if (TextureFinder.IsNormal(file))
+            {
+                if (importer.textureType != TextureImporterType.NormalMap)
+                {
+                    importer.textureType = TextureImporterType.NormalMap;
+                    importer.sRGBTexture = false;
+                }
+            }
+        }
+
         void OnPostprocessModel(GameObject fbxRoot)
         {
             var settings = PbrImportSettings.GetOrCreateSettings();
