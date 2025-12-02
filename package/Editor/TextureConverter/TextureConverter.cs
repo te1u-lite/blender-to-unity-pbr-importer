@@ -94,7 +94,7 @@ namespace BlenderToUnityPBRImporter.Editor
         /// 読み込み可能 (Readable) な Texture を返す。
         /// 必要であれば一時的に isReadable = true にして再インポートする。
         /// </summary>
-        private static Texture2D LoadReadable(string assetPath)
+        public static Texture2D LoadReadable(string assetPath)
         {
             var tex = AssetDatabase.LoadAssetAtPath<Texture2D>(assetPath);
             if (tex == null)

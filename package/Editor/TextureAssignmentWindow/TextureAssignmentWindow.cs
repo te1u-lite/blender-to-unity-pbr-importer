@@ -5,6 +5,7 @@ using System.IO;
 
 namespace BlenderToUnityPBRImporter.Editor
 {
+
     /// <summary>
     /// FBX に含まれるテクスチャを検索し、
     /// ユーザーが手動で割り当て確認できる専用 EditorWindow。
@@ -14,6 +15,15 @@ namespace BlenderToUnityPBRImporter.Editor
         private GameObject fbxObject;
         private TextureFinder.TextureSearchResult searchResult;
         private TextureAssigner.TextureAssignmentData assignmentData;
+
+        public enum MRMode
+        {
+            Auto,
+            MetallicSmoothness,
+            MetallicAndSmoothness,
+            MetallicAndRoughness
+        }
+        public MRMode mrMode = MRMode.MetallicAndRoughness;
 
         private int albedoIndex = -1;
         private int normalIndex = -1;
@@ -87,15 +97,66 @@ namespace BlenderToUnityPBRImporter.Editor
 
             EditorGUILayout.LabelField("手動割り当て", EditorStyles.boldLabel);
 
-            albedoIndex = EditorGUILayout.Popup("Albedo", albedoIndex, names);
-            normalIndex = EditorGUILayout.Popup("Normal", normalIndex, names);
-            metallicIndex = EditorGUILayout.Popup("Metallic", metallicIndex, names);
-            roughnessIndex = EditorGUILayout.Popup("Roughness", roughnessIndex, names);
+            mrMode = (MRMode)EditorGUILayout.EnumPopup("Metallic/Roughness Mode", mrMode);
 
+            if (mrMode == MRMode.Auto)
+            {
+                EditorGUILayout.HelpBox("AutoMode: 自動判定で MetallicSmoothness を適用します。", MessageType.Info);
+                // Albedo / Normal だけ表示
+                albedoIndex = EditorGUILayout.Popup("Albedo", albedoIndex, names);
+                assignmentData.Albedo = GetSelected(albedoIndex);
+
+                normalIndex = EditorGUILayout.Popup("Normal", normalIndex, names);
+                assignmentData.Normal = GetSelected(normalIndex);
+                return;
+            }
+
+            GUILayout.Space(6);
+
+            // ● Albedo 共通
+            albedoIndex = EditorGUILayout.Popup("Albedo", albedoIndex, names);
             assignmentData.Albedo = GetSelected(albedoIndex);
+
+            // ● Normal 共通
+            normalIndex = EditorGUILayout.Popup("Normal", normalIndex, names);
             assignmentData.Normal = GetSelected(normalIndex);
-            assignmentData.Metallic = GetSelected(metallicIndex);
-            assignmentData.Roughness = GetSelected(roughnessIndex);
+
+            GUILayout.Space(6);
+
+            // ▼ モード別の切り替え
+            switch (mrMode)
+            {
+                case MRMode.MetallicSmoothness:
+                    EditorGUILayout.LabelField("MetallicSmoothness モード", EditorStyles.boldLabel);
+
+                    metallicIndex = EditorGUILayout.Popup("MetallicSmoothness", metallicIndex, names);
+                    assignmentData.Metallic = GetSelected(metallicIndex); // Metallic に統一して格納
+                    break;
+
+                case MRMode.MetallicAndSmoothness:
+                    EditorGUILayout.LabelField("Metallic + Smoothness モード", EditorStyles.boldLabel);
+
+                    metallicIndex = EditorGUILayout.Popup("Metallic", metallicIndex, names);
+                    assignmentData.Metallic = GetSelected(metallicIndex);
+
+                    // Smoothness 用の index が必要なので追加
+                    int smoothIndex = assignmentData.AllTextures.IndexOf(assignmentData.Smoothness);
+                    smoothIndex = EditorGUILayout.Popup("Smoothness", smoothIndex, names);
+                    assignmentData.Smoothness = GetSelected(smoothIndex);
+
+                    break;
+
+                case MRMode.MetallicAndRoughness:
+                    EditorGUILayout.LabelField("Metallic + Roughness モード", EditorStyles.boldLabel);
+
+                    metallicIndex = EditorGUILayout.Popup("Metallic", metallicIndex, names);
+                    assignmentData.Metallic = GetSelected(metallicIndex);
+
+                    roughnessIndex = EditorGUILayout.Popup("Roughness", roughnessIndex, names);
+                    assignmentData.Roughness = GetSelected(roughnessIndex);
+
+                    break;
+            }
         }
 
         /// <summary>
@@ -116,7 +177,7 @@ namespace BlenderToUnityPBRImporter.Editor
                 return;
             }
             var assigner = new TextureAssigner();
-            assigner.ApplyToMaterial(mat, assignmentData);
+            assigner.ApplyToMaterial(mat, assignmentData, mrMode);
 
             Debug.Log("[INFO][TextureAssignmentWindow] Material へテクスチャ割り当てが完了しました。");
         }
