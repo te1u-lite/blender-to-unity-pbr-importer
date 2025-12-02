@@ -196,6 +196,8 @@ namespace BlenderToUnityPBRImporter.Editor
             var assigner = new TextureAssigner();
             assigner.ApplyToMaterial(mat, assignmentData, searchResult, mrMode);
 
+            RemapMaterialToFbx(fbxObject, mat);
+
             Debug.Log("[INFO][TextureAssignmentWindow] Material へテクスチャ割り当てが完了しました。");
         }
 
@@ -219,6 +221,36 @@ namespace BlenderToUnityPBRImporter.Editor
             return new MaterialBuilderStandard().CreateMaterial(matFolder, name);
         }
 
+        private void RemapMaterialToFbx(GameObject fbx, Material externalMaterial)
+        {
+            string fbxPath = AssetDatabase.GetAssetPath(fbx);
+
+            var importer = AssetImporter.GetAtPath(fbxPath) as ModelImporter;
+            if (importer == null)
+            {
+                Debug.LogError("[ERROR] ModelImporter が取得できません: " + fbxPath);
+                return;
+            }
+
+            // FBX 内部マテリアルを探索
+            var internalAssets = AssetDatabase.LoadAllAssetsAtPath(fbxPath);
+
+            foreach (var internalObj in internalAssets)
+            {
+                if (internalObj is not Material internalMat)
+                    continue;
+
+                // 内部マテリアル名で Remap
+                var id = new AssetImporter.SourceAssetIdentifier(typeof(Material), internalMat.name);
+
+                importer.AddRemap(id, externalMaterial);
+            }
+
+            AssetDatabase.WriteImportSettingsIfDirty(fbxPath);
+            AssetDatabase.ImportAsset(fbxPath, ImportAssetOptions.ForceUpdate);
+
+            Debug.Log("[INFO] FBX のマテリアルを新規マテリアルへ Remap しました。");
+        }
 
         /// <summary>
         /// FBX に対応する FBM フォルダのフルパスを返す。
