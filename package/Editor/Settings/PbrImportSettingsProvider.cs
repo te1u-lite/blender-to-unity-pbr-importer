@@ -48,21 +48,6 @@ namespace BlenderToUnityPBRImporter.Editor
             DrawKeywordList("Metallic", "metallicKeywords");
             DrawKeywordList("Roughness", "roughnessKeywords");
 
-            EditorGUILayout.Space(10);
-
-            EditorGUILayout.LabelField("Priority", EditorStyles.boldLabel);
-            EditorGUILayout.PropertyField(so.FindProperty("albedoPriority"));
-            EditorGUILayout.PropertyField(so.FindProperty("normalPriority"));
-            EditorGUILayout.PropertyField(so.FindProperty("metallicPriority"));
-            EditorGUILayout.PropertyField(so.FindProperty("roughnessPriority"));
-
-            EditorGUILayout.Space(20);
-
-            GUILayout.Label("Manual Reimport", EditorStyles.boldLabel);
-
-            if (GUILayout.Button("Reimport Selected FBX"))
-                ReimportSelectedFbx();
-
             so.ApplyModifiedProperties();
         }
 
@@ -70,24 +55,6 @@ namespace BlenderToUnityPBRImporter.Editor
         {
             var prop = so.FindProperty(propertyName);
             EditorGUILayout.PropertyField(prop, new GUIContent(label), true);
-        }
-
-        private void ReimportSelectedFbx()
-        {
-            foreach (var obj in Selection.objects)
-            {
-                string path = AssetDatabase.GetAssetPath(obj);
-                if (!path.EndsWith(".fbx")) continue;
-
-                DeferredFbxProcessor.Enqueue(() =>
-                {
-                    var proc = new AutoFbxMaterialPostProcessor();
-                    proc.GetType()
-                        .GetMethod("ProcessFbxAfterImport",
-                            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
-                        ?.Invoke(proc, new object[] { path, true });
-                });
-            }
         }
 
         [SettingsProvider]

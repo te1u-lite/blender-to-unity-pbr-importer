@@ -53,26 +53,17 @@ namespace BlenderToUnityPBRImporter.Editor
             data.AllTextures.AddRange(search.Roughness);
             data.AllTextures.AddRange(search.Unknown);
 
-            // 候補が 1 つだけなら自動選択
-            if (search.Albedo.Count == 1)
+            if (search.Albedo.Count >= 1)
                 data.Albedo = search.Albedo[0];
-            else if (search.Albedo.Count > 1)
-                data.Albedo = SelectByPriority(search.Albedo, settings.albedoPriority);
 
-            if (search.Normal.Count == 1)
+            if (search.Normal.Count >= 1)
                 data.Normal = search.Normal[0];
-            else if (search.Normal.Count > 1)
-                data.Normal = SelectByPriority(search.Normal, settings.normalPriority);
 
-            if (search.Metallic.Count == 1)
+            if (search.Metallic.Count >= 1)
                 data.Metallic = search.Metallic[0];
-            else if (search.Metallic.Count > 1)
-                data.Metallic = SelectByPriority(search.Metallic, settings.metallicPriority);
 
-            if (search.Roughness.Count == 1)
+            if (search.Roughness.Count >= 1)
                 data.Roughness = search.Roughness[0];
-            else if (search.Roughness.Count > 1)
-                data.Roughness = SelectByPriority(search.Roughness, settings.roughnessPriority);
 
             return data;
         }
