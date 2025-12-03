@@ -27,7 +27,7 @@ namespace BlenderToUnityPBRImporter.Editor
         /// 派生クラスで override することで命名規則を変更可能。
         /// </summary>
         /// <param name="baseName">ベース名</param>
-        protected virtual string BuildMaterialName(string baseName)
+        public virtual string BuildMaterialName(string baseName)
             => string.IsNullOrEmpty(baseName) ? "Unnamed_mat" : $"{baseName}_mat";
     }
 }

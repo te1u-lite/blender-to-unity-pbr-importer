@@ -31,6 +31,8 @@ namespace BlenderToUnityPBRImporter.Editor
         /// </summary>
         public override Material CreateMaterial(string materialPath, string baseName)
         {
+            Debug.Log($"[MaterialBuilder] CreateMaterial called: {baseName}");
+
             // 入力チェック
             if (string.IsNullOrEmpty(materialPath))
             {

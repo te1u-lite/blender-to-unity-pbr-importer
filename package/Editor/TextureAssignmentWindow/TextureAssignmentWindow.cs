@@ -21,7 +21,8 @@ namespace BlenderToUnityPBRImporter.Editor
             Auto,
             MetallicSmoothness,
             MetallicAndSmoothness,
-            MetallicAndRoughness
+            MetallicAndRoughness,
+            ForceMetallicAndRoughness
         }
         public MRMode mrMode = MRMode.MetallicAndRoughness;
 

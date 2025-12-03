@@ -4,6 +4,7 @@ using UnityEngine;
 using UnityEditor;
 using JetBrains.Annotations;
 using Codice.Client.Common;
+using System.Linq;
 
 namespace BlenderToUnityPBRImporter.Editor
 {
@@ -39,37 +40,56 @@ namespace BlenderToUnityPBRImporter.Editor
         /// </summary>
         public TextureAssignmentData PrepareAssignment(TextureFinder.TextureSearchResult search)
         {
-            var settings = PbrImportSettings.GetOrCreateSettings();
-
             var data = new TextureAssignmentData()
             {
                 AlbedoCandidates = search.Albedo,
                 NormalCandidates = search.Normal,
-                MetallicCandidates = search.Metallic,
+
+                MetallicCandidates = search.Metallic
+            .Where(t => !IsGeneratedMRTexture(t))
+            .ToList(),
+
                 RoughnessCandidates = search.Roughness
+            .Where(t => !IsGeneratedMRTexture(t))
+            .ToList()
             };
 
-            // 全テクスチャを統合 (ここが重要:手動選択用)
+            // AllTextures に入れるのは OK（Auto 用）
             data.AllTextures.AddRange(search.Albedo);
             data.AllTextures.AddRange(search.Normal);
             data.AllTextures.AddRange(search.Metallic);
             data.AllTextures.AddRange(search.Roughness);
             data.AllTextures.AddRange(search.Unknown);
 
-            if (search.Albedo.Count >= 1)
-                data.Albedo = search.Albedo[0];
+            if (data.AlbedoCandidates.Count >= 1)
+                data.Albedo = data.AlbedoCandidates[0];
 
-            if (search.Normal.Count >= 1)
-                data.Normal = search.Normal[0];
+            if (data.NormalCandidates.Count >= 1)
+                data.Normal = data.NormalCandidates[0];
 
-            if (search.Metallic.Count >= 1)
-                data.Metallic = search.Metallic[0];
+            // ★ ここが重要：search.Metallic ではなく MetallicCandidates を使う！
+            if (data.MetallicCandidates.Count >= 1)
+                data.Metallic = data.MetallicCandidates[0];
 
-            if (search.Roughness.Count >= 1)
-                data.Roughness = search.Roughness[0];
+            // ★ 同様に RoughnessCandidates を使用
+            if (data.RoughnessCandidates.Count >= 1)
+                data.Roughness = data.RoughnessCandidates[0];
 
             return data;
         }
+
+        private bool IsGeneratedMRTexture(Texture2D tex)
+        {
+            if (tex == null) return false;
+
+            string name = tex.name.ToLower();
+
+            return name == "metallicsmoothness"
+                || name.EndsWith("_smooth")
+                || name.Contains("metallicsmoothness");
+        }
+
+
         /// <summary>
         /// TextureAssignmentData の内容を Material に反映する。
         /// Albedo/Normal は直接セットし、Metallic/Roughness は MR マップ生成に利用する。
@@ -147,6 +167,10 @@ namespace BlenderToUnityPBRImporter.Editor
                 case TextureAssignmentWindow.MRMode.MetallicAndRoughness:
                     GenerateAndApplyMR(material, data);   // 既存関数を利用
                     break;
+
+                case TextureAssignmentWindow.MRMode.ForceMetallicAndRoughness:
+                    GenerateAndApplyMR(material, data, force: true);
+                    break;
             }
 
 
@@ -155,6 +179,30 @@ namespace BlenderToUnityPBRImporter.Editor
 
             return changed;
         }
+
+        public void ApplyTexturesDirect(Material mat, TextureFinder.TextureSearchResult search)
+        {
+            if (search.Albedo.Count > 0)
+                mat.SetTexture("_MainTex", search.Albedo[0]);
+
+            if (search.Normal.Count > 0)
+            {
+                mat.SetTexture("_BumpMap", search.Normal[0]);
+                mat.EnableKeyword("_NORMALMAP");
+            }
+
+            if (search.Metallic.Count > 0)
+            {
+                mat.SetTexture("_MetallicGlossMap", search.Metallic[0]);
+                mat.EnableKeyword("_METALLICGLOSSMAP");
+            }
+
+            if (search.Roughness.Count > 0)
+            {
+                mat.SetTexture("_SpecGlossMap", search.Roughness[0]);
+            }
+        }
+
 
         /// <summary>
         /// 指定フォルダ内のテクスチャを自動検索して Material に割り当てる簡略メソッド。
@@ -357,13 +405,30 @@ namespace BlenderToUnityPBRImporter.Editor
             }
         }
 
-        private void GenerateAndApplyMR(Material material, TextureAssignmentData data)
+        private void GenerateAndApplyMR(Material material, TextureAssignmentData data, bool force = false)
         {
             string metallicPath = data.Metallic ? AssetDatabase.GetAssetPath(data.Metallic) : null;
             string roughPath = data.Roughness ? AssetDatabase.GetAssetPath(data.Roughness) : null;
 
             if (metallicPath != null) EnsureNotNormalMap(metallicPath);
             if (roughPath != null) EnsureNotNormalMap(roughPath);
+
+            // ▼▼▼ ★ 強制モードなら古い metallicsmoothness.png を削除 ▼▼▼
+            if (force)
+            {
+                string folder = Path.GetDirectoryName(metallicPath ?? roughPath);
+                string msPath = Path.Combine(folder, "metallicsmoothness.png").Replace("\\", "/");
+
+                if (File.Exists(msPath))
+                {
+                    AssetDatabase.DeleteAsset(msPath);
+                    Debug.Log($"[ForceMR] 古い metallicsmoothness.png を削除しました → {msPath}");
+                }
+            }
+            // ▲▲▲ ここまで強制削除 ▲▲▲
+
+            Debug.Log("metallicPath = " + metallicPath);
+            Debug.Log("roughPath = " + roughPath);
 
             Texture2D mrTex = TextureConverter.CreateMetallicRoughnessMap(metallicPath, roughPath);
 

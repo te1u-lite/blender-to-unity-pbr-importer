@@ -1,21 +1,23 @@
 using UnityEngine;
 using UnityEditor;
 using System.IO;
+using System;
 
 namespace BlenderToUnityPBRImporter.Editor
 {
     /// <summary>
-    /// FBX インポート時に自動的にマテリアル作成＆テクスチャ割り当てを行う PostProcessor
+    /// Unity のデフォルト External Material 生成を尊重し、
+    /// 生成後に上書き編集だけ行う PostProcessor
     /// </summary>
     public class AutoFbxMaterialPostProcessor : AssetPostprocessor
     {
+
         void OnPreprocessTexture()
         {
             var importer = (TextureImporter)assetImporter;
 
-            string file = System.IO.Path.GetFileName(assetPath).ToLower();
+            string file = Path.GetFileName(assetPath).ToLower();
 
-            // NormalMap 判定（あなたの設定に合わせる）
             if (TextureFinder.IsNormal(file))
             {
                 if (importer.textureType != TextureImporterType.NormalMap)
@@ -26,69 +28,69 @@ namespace BlenderToUnityPBRImporter.Editor
             }
         }
 
+        void OnPreprocessModel()
+        {
+            var importer = assetImporter as ModelImporter;
+            if (importer == null) return;
+
+            importer.materialImportMode = ModelImporterMaterialImportMode.ImportViaMaterialDescription;
+            importer.materialLocation = ModelImporterMaterialLocation.InPrefab;
+        }
+
         void OnPostprocessModel(GameObject fbxRoot)
         {
-            var settings = PbrImportSettings.GetOrCreateSettings();
-
-            if (!settings.autoImportEnabled)
+            if (!assetPath.EndsWith(".fbx", StringComparison.OrdinalIgnoreCase))
                 return;
 
-            string fbxPath = assetPath;
+            var importer = (ModelImporter)assetImporter;
 
-            if (!fbxPath.EndsWith(".fbx", System.StringComparison.OrdinalIgnoreCase))
-                return;
+            bool isFirstImport = importer.userData != "InitialRemapDone";
 
-            // ★ キューに積むだけで、ここでは絶対に AssetDatabase を触らない！
             DeferredFbxProcessor.Enqueue(() =>
             {
-                ProcessFbxAfterImport(fbxPath);
+                if (isFirstImport)
+                {
+                    Debug.Log("[Processor] Initial import: " + assetPath);
+                    ProcessInitialImport(assetPath);
+                }
+                else
+                {
+                    Debug.Log("[Processor] Update import (no reimport): " + assetPath);
+                    ProcessUpdateImport(assetPath);
+                }
             });
         }
 
-        private void ProcessFbxAfterImport(string fbxPath, bool force = false)
+        private void ProcessFbxAfterImport(string fbxPath)
         {
-            // 1) Importer 取得＆処理済みチェック
             var importer = AssetImporter.GetAtPath(fbxPath) as ModelImporter;
             if (importer == null)
                 return;
 
-            importer.materialLocation = ModelImporterMaterialLocation.External;
-
-            const string ProcessedFlag = "BTU_PBR_IMPORTED";
-
-            if (force)
+            // ★ 無限ループ防止：既に処理済みなら抜ける
+            if (importer.userData == "MaterialRemapDone")
             {
-                importer.userData = ""; // リセット
-            }
-
-            // 2) パス系
-            string dir = Path.GetDirectoryName(fbxPath);
-            string fbxName = Path.GetFileNameWithoutExtension(fbxPath);
-
-            string matFolder = $"{dir}/Materials";
-            if (!AssetDatabase.IsValidFolder(matFolder))
-                AssetDatabase.CreateFolder(dir, "Materials");
-
-            // FBM フォルダ
-            string fbmFolder = $"{dir}/{fbxName}.fbm";
-            if (!Directory.Exists(fbmFolder))
-            {
-                Debug.LogWarning("[AutoFbxMaterialPostProcessor] FBM フォルダがないためスキップ: " + fbmFolder);
+                Debug.Log("[AutoFbxMaterialPostProcessor] Skip SaveAndReimport (already processed)");
                 return;
             }
 
-            // 3) テクスチャ検索 & 割り当て準備（1回だけ）
+            string dir = Path.GetDirectoryName(fbxPath);
+            string fbxName = Path.GetFileNameWithoutExtension(fbxPath);
+            string matFolder = $"{dir}/Materials";
+
+            if (!AssetDatabase.IsValidFolder(matFolder))
+                AssetDatabase.CreateFolder(dir, "Materials");
+
+            string fbmFolder = $"{dir}/{fbxName}.fbm";
+            if (!Directory.Exists(fbmFolder))
+                return;
+
             var search = TextureFinder.FindTextures(fbmFolder);
             var assigner = new TextureAssigner();
             var data = assigner.PrepareAssignment(search);
 
-            var settings = PbrImportSettings.GetOrCreateSettings();
             var builder = new MaterialBuilderStandard();
 
-            bool changed = false;
-            var existingMap = importer.GetExternalObjectMap();
-
-            // 4) FBX 内部マテリアルごとに外部マテリアルを用意して Remap
             var internalAssets = AssetDatabase.LoadAllAssetsAtPath(fbxPath);
 
             foreach (var internalObj in internalAssets)
@@ -97,35 +99,129 @@ namespace BlenderToUnityPBRImporter.Editor
                     continue;
 
                 string internalMatName = internalMat.name;
+                string matPath = $"{matFolder}/{internalMatName}.mat";
 
-                var externalMat = builder.CreateMaterial(matFolder, internalMatName);
+                Material externalMat =
+                    AssetDatabase.LoadAssetAtPath<Material>(matPath)
+                    ?? builder.CreateMaterial(matFolder, internalMatName);
+
                 if (externalMat == null)
                     continue;
 
-                // マテリアル内容の変更を検知
-                bool matDirty = assigner.ApplyToMaterial(externalMat, data, search, TextureAssignmentWindow.MRMode.MetallicAndRoughness);
-                if (matDirty)
+                bool dirty = assigner.ApplyToMaterial(
+                    externalMat,
+                    data,
+                    search,
+                    TextureAssignmentWindow.MRMode.MetallicAndRoughness
+                );
+
+                if (dirty)
                 {
-                    changed = true;
                     EditorUtility.SetDirty(externalMat);
                 }
 
-                // ★ Remap（これが無いと絶対に反映されない）
                 var id = new AssetImporter.SourceAssetIdentifier(typeof(Material), internalMatName);
-
-                if (!existingMap.TryGetValue(id, out var mappedObj) || mappedObj != externalMat)
-                {
-                    importer.AddRemap(id, externalMat);
-                    changed = true;
-                }
+                importer.AddRemap(id, externalMat);
             }
 
-            if (changed)
-            {
-                importer.userData = ProcessedFlag;
-                AssetDatabase.WriteImportSettingsIfDirty(fbxPath);
-                AssetDatabase.ImportAsset(fbxPath, ImportAssetOptions.ForceUpdate);
-            }
+            // ▼▼▼ ★ SaveAndReimport（初回のみ） ▼▼▼
+            importer.userData = "MaterialRemapDone";  // フラグを付ける
+            Debug.Log("[AutoFbxMaterialPostProcessor] SaveAndReimport triggered");
+            importer.SaveAndReimport();
         }
+
+        private void ProcessInitialImport(string fbxPath)
+        {
+            var importer = AssetImporter.GetAtPath(fbxPath) as ModelImporter;
+            if (importer == null) return;
+
+            string dir = Path.GetDirectoryName(fbxPath);
+            string fbxName = Path.GetFileNameWithoutExtension(fbxPath);
+            string matFolder = $"{dir}/Materials";
+
+            if (!AssetDatabase.IsValidFolder(matFolder))
+                AssetDatabase.CreateFolder(dir, "Materials");
+
+            string fbmFolder = $"{dir}/{fbxName}.fbm";
+            if (!Directory.Exists(fbmFolder)) return;
+
+            var search = TextureFinder.FindTextures(fbmFolder);
+            var assigner = new TextureAssigner();
+            var data = assigner.PrepareAssignment(search);
+            var builder = new MaterialBuilderStandard();
+
+            var internalAssets = AssetDatabase.LoadAllAssetsAtPath(fbxPath);
+
+            foreach (var internalObj in internalAssets)
+            {
+                if (internalObj is not Material internalMat)
+                    continue;
+
+                string internalMatName = internalMat.name;
+                string matPath = $"{matFolder}/{internalMatName}.mat";
+
+                // 作成（初回）
+                Material externalMat = builder.CreateMaterial(matFolder, internalMatName);
+
+                assigner.ApplyToMaterial(
+                    externalMat,
+                    data,
+                    search,
+                    TextureAssignmentWindow.MRMode.MetallicAndRoughness
+                );
+
+                EditorUtility.SetDirty(externalMat);
+
+                // ★ Remap を初回に適用
+                var id = new AssetImporter.SourceAssetIdentifier(typeof(Material), internalMatName);
+                importer.AddRemap(id, externalMat);
+            }
+
+            // ★ 初回は SaveAndReimport が必須
+            importer.userData = "InitialRemapDone";
+            importer.SaveAndReimport();
+        }
+
+
+        private void ProcessUpdateImport(string fbxPath)
+        {
+            var importer = AssetImporter.GetAtPath(fbxPath) as ModelImporter;
+            if (importer == null) return;
+
+            string dir = Path.GetDirectoryName(fbxPath);
+            string fbxName = Path.GetFileNameWithoutExtension(fbxPath);
+
+            string fbmFolder = $"{dir}/{fbxName}.fbm";
+            if (!Directory.Exists(fbmFolder)) return;
+
+            var search = TextureFinder.FindTextures(fbmFolder);
+            var assigner = new TextureAssigner();
+
+            // ★ Remap されている外部マテリアルを全て取得
+            var remaps = importer.GetExternalObjectMap();
+
+            foreach (var kv in remaps)
+            {
+                if (kv.Value is not Material externalMat)
+                    continue;
+
+                Debug.Log("[Processor] Updating material: " + externalMat.name);
+
+                var data = assigner.PrepareAssignment(search);
+
+                assigner.ApplyToMaterial(
+                    externalMat,
+                    data,
+                    search,
+                    TextureAssignmentWindow.MRMode.ForceMetallicAndRoughness
+                );
+
+                EditorUtility.SetDirty(externalMat);
+            }
+
+            Debug.Log("[Processor] External materials updated (no SaveAndReimport)");
+        }
+
+
     }
 }

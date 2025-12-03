@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEditor;
+using UnityEngine;
 
 namespace BlenderToUnityPBRImporter.Editor
 {
@@ -17,13 +18,19 @@ namespace BlenderToUnityPBRImporter.Editor
 
         public static void Enqueue(Action action)
         {
+            Debug.Log("[Deferred] Enqueue called");
+
             queue.Enqueue(action);
 
-            // 1回だけ schedule
             if (!isScheduled)
             {
+                Debug.Log("[Deferred] Schedule first call");
                 isScheduled = true;
-                EditorApplication.delayCall += () => { isScheduled = false; };
+                EditorApplication.delayCall += () =>
+                {
+                    Debug.Log("[Deferred] delayCall executed");
+                    isScheduled = false;
+                };
             }
         }
 
@@ -35,12 +42,9 @@ namespace BlenderToUnityPBRImporter.Editor
 
             while (queue.Count > 0)
             {
+                Debug.Log($"[Deferred] ProcessQueue dequeue: {queue.Count}");
                 var action = queue.Dequeue();
-                try { action?.Invoke(); }
-                catch (Exception e)
-                {
-                    UnityEngine.Debug.LogException(e);
-                }
+                action?.Invoke();
             }
         }
     }
